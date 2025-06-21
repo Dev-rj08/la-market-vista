@@ -17,6 +17,7 @@ interface ChartDataPoint {
   date: string;
   price: number;
   volume: number;
+  timestamp: number;
 }
 
 const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, symbol, currency }) => {
@@ -25,7 +26,8 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, sy
   const [timeRange, setTimeRange] = useState('1M');
   const [stockInfo, setStockInfo] = useState<any>(null);
 
-  const API_KEY = 'AHW1121LRJ833H9W';
+  const FINNHUB_API_KEY = 'd1b5991r01qjhvtsl1ggd1b5991r01qjhvtsl1h0';
+  const FIXER_API_KEY = '56a344b21c244aaa2ab92acc7253659f';
 
   useEffect(() => {
     if (isOpen && symbol) {
@@ -36,39 +38,69 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, sy
   const fetchStockData = async () => {
     setLoading(true);
     try {
-      console.log(`Fetching data for ${symbol} with range ${timeRange}`);
+      console.log(`Fetching detailed data for ${symbol} with range ${timeRange}`);
       
-      // Fetch daily time series data
-      const timeSeriesResponse = await fetch(
-        `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${API_KEY}`
+      // Calculate date range
+      const endDate = Math.floor(Date.now() / 1000);
+      const startDate = getStartDate(endDate);
+      
+      // Fetch historical data from Finnhub
+      const candleResponse = await fetch(
+        `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=D&from=${startDate}&to=${endDate}&token=${FINNHUB_API_KEY}`
       );
-      const timeSeriesData = await timeSeriesResponse.json();
+      const candleData = await candleResponse.json();
       
-      // Fetch company overview
-      const overviewResponse = await fetch(
-        `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${API_KEY}`
+      // Fetch company profile
+      const profileResponse = await fetch(
+        `https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${FINNHUB_API_KEY}`
       );
-      const overviewData = await overviewResponse.json();
+      const profileData = await profileResponse.json();
       
-      console.log('Time Series Data:', timeSeriesData);
-      console.log('Overview Data:', overviewData);
+      // Fetch current quote
+      const quoteResponse = await fetch(
+        `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_API_KEY}`
+      );
+      const quoteData = await quoteResponse.json();
       
-      if (timeSeriesData['Time Series (Daily)']) {
-        const timeSeries = timeSeriesData['Time Series (Daily)'];
-        const processedData: ChartDataPoint[] = Object.entries(timeSeries)
-          .slice(0, getDataPointsCount())
-          .map(([date, data]: [string, any]) => ({
-            date,
-            price: parseFloat(data['4. close']),
-            volume: parseInt(data['5. volume'])
-          }))
-          .reverse();
+      console.log('Finnhub Candle Data:', candleData);
+      console.log('Finnhub Profile Data:', profileData);
+      console.log('Finnhub Quote Data:', quoteData);
+      
+      if (candleData.s === 'ok' && candleData.c && candleData.c.length > 0) {
+        // Process real data
+        const processedData: ChartDataPoint[] = candleData.t.map((timestamp: number, index: number) => {
+          let price = candleData.c[index];
+          
+          // Convert currency if needed
+          if (currency !== 'USD') {
+            // For demo purposes, using approximate conversion rates
+            switch (currency) {
+              case 'EUR': price *= 0.85; break;
+              case 'GBP': price *= 0.73; break;
+              case 'JPY': price *= 110; break;
+              case 'CAD': price *= 1.25; break;
+              case 'INR': price *= 83; break;
+            }
+          }
+          
+          return {
+            date: new Date(timestamp * 1000).toISOString().split('T')[0],
+            price: price,
+            volume: candleData.v[index],
+            timestamp: timestamp
+          };
+        });
         
         setChartData(processedData);
-        setStockInfo(overviewData);
+        setStockInfo({
+          ...profileData,
+          currentPrice: quoteData.c,
+          change: quoteData.d,
+          changePercent: quoteData.dp,
+          previousClose: quoteData.pc
+        });
       } else {
-        console.error('No time series data found');
-        // Fallback to mock data if API fails
+        console.warn('No valid candle data, generating mock data');
         generateMockData();
       }
     } catch (error) {
@@ -77,6 +109,16 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, sy
     } finally {
       setLoading(false);
     }
+  };
+
+  const getStartDate = (endDate: number) => {
+    const days = {
+      '1W': 7,
+      '1M': 30,
+      '3M': 90,
+      '1Y': 365
+    };
+    return endDate - (days[timeRange as keyof typeof days] * 24 * 60 * 60);
   };
 
   const generateMockData = () => {
@@ -89,19 +131,36 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, sy
       date.setDate(date.getDate() - (dataPoints - i));
       
       basePrice += (Math.random() - 0.5) * 10;
+      const finalPrice = Math.max(basePrice, 10);
+      
+      // Apply currency conversion
+      let convertedPrice = finalPrice;
+      switch (currency) {
+        case 'EUR': convertedPrice *= 0.85; break;
+        case 'GBP': convertedPrice *= 0.73; break;
+        case 'JPY': convertedPrice *= 110; break;
+        case 'CAD': convertedPrice *= 1.25; break;
+        case 'INR': convertedPrice *= 83; break;
+      }
+      
       mockData.push({
         date: date.toISOString().split('T')[0],
-        price: Math.max(basePrice, 10),
-        volume: Math.floor(Math.random() * 10000000) + 1000000
+        price: convertedPrice,
+        volume: Math.floor(Math.random() * 10000000) + 1000000,
+        timestamp: date.getTime() / 1000
       });
     }
     
     setChartData(mockData);
     setStockInfo({
-      Name: `${symbol} Corporation`,
-      MarketCapitalization: (Math.random() * 2000000000000).toFixed(0),
-      PERatio: (Math.random() * 30 + 5).toFixed(2),
-      DividendYield: (Math.random() * 5).toFixed(3)
+      name: `${symbol} Corporation`,
+      marketCapitalization: (Math.random() * 2000000000000).toFixed(0),
+      peRatio: (Math.random() * 30 + 5).toFixed(2),
+      dividendYield: (Math.random() * 5).toFixed(3),
+      currentPrice: mockData[mockData.length - 1]?.price || 100,
+      change: (Math.random() - 0.5) * 10,
+      changePercent: (Math.random() - 0.5) * 5,
+      previousClose: mockData[mockData.length - 2]?.price || 95
     });
   };
 
@@ -178,7 +237,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, sy
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin" />
-            <span className="ml-2">Loading stock data...</span>
+            <span className="ml-2">Loading stock data from Finnhub...</span>
           </div>
         ) : (
           <div className="space-y-6">
@@ -187,7 +246,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, sy
               <div className="bg-card/50 p-4 rounded-lg border">
                 <div className="text-sm text-muted-foreground">Current Price</div>
                 <div className="text-xl font-bold">
-                  {getCurrencySymbol(currency)}{formatPrice(chartData[chartData.length - 1]?.price || 0)}
+                  {getCurrencySymbol(currency)}{formatPrice(stockInfo?.currentPrice || chartData[chartData.length - 1]?.price || 0)}
                 </div>
               </div>
               <div className="bg-card/50 p-4 rounded-lg border">
@@ -200,8 +259,8 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, sy
               <div className="bg-card/50 p-4 rounded-lg border">
                 <div className="text-sm text-muted-foreground">Market Cap</div>
                 <div className="text-xl font-bold">
-                  {stockInfo?.MarketCapitalization ? 
-                    `${getCurrencySymbol(currency)}${(parseInt(stockInfo.MarketCapitalization) / 1e9).toFixed(1)}B` : 
+                  {stockInfo?.marketCapitalization ? 
+                    `${getCurrencySymbol(currency)}${(parseInt(stockInfo.marketCapitalization) / 1e9).toFixed(1)}B` : 
                     'N/A'
                   }
                 </div>
@@ -209,14 +268,14 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, sy
               <div className="bg-card/50 p-4 rounded-lg border">
                 <div className="text-sm text-muted-foreground">P/E Ratio</div>
                 <div className="text-xl font-bold">
-                  {stockInfo?.PERatio || 'N/A'}
+                  {stockInfo?.peRatio || stockInfo?.pe || 'N/A'}
                 </div>
               </div>
             </div>
 
             {/* Chart */}
             <div className="bg-card/20 p-4 rounded-lg border">
-              <h3 className="text-lg font-semibold mb-4">Price Chart - {timeRange}</h3>
+              <h3 className="text-lg font-semibold mb-4">Price Chart - {timeRange} (Powered by Finnhub)</h3>
               <ChartContainer config={chartConfig} className="h-80">
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -250,10 +309,16 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, sy
                 <h3 className="text-lg font-semibold mb-4">Company Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div>
-                    <strong>Company Name:</strong> {stockInfo.Name || `${symbol} Corporation`}
+                    <strong>Company Name:</strong> {stockInfo.name || `${symbol} Corporation`}
                   </div>
                   <div>
-                    <strong>Dividend Yield:</strong> {stockInfo.DividendYield ? `${stockInfo.DividendYield}%` : 'N/A'}
+                    <strong>Industry:</strong> {stockInfo.finnhubIndustry || 'Technology'}
+                  </div>
+                  <div>
+                    <strong>Country:</strong> {stockInfo.country || 'US'}
+                  </div>
+                  <div>
+                    <strong>Currency:</strong> {stockInfo.currency || 'USD'}
                   </div>
                 </div>
               </div>

@@ -17,16 +17,17 @@ interface NewsItem {
 const NewsSection: React.FC = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [usingFallback, setUsingFallback] = useState(false);
 
-  const API_KEY = '3ed47be691e6438b83d440d111cb538f';
+  const NEWS_API_KEY = '3ed47be691e6438b83d440d111cb538f';
 
   useEffect(() => {
     const fetchNews = async () => {
       setLoading(true);
       try {
-        console.log('Fetching financial news...');
+        console.log('Attempting to fetch financial news...');
         const response = await fetch(
-          `https://newsapi.org/v2/everything?q=stock+market+finance+trading&sortBy=publishedAt&pageSize=6&apiKey=${API_KEY}`
+          `https://newsapi.org/v2/everything?q=stock+market+finance+trading&sortBy=publishedAt&pageSize=6&apiKey=${NEWS_API_KEY}`
         );
         
         if (!response.ok) {
@@ -36,42 +37,65 @@ const NewsSection: React.FC = () => {
         const data = await response.json();
         console.log('News API Response:', data);
         
-        if (data.articles) {
+        if (data.articles && data.articles.length > 0) {
           setNews(data.articles);
+          setUsingFallback(false);
         } else {
-          console.error('No articles found in response');
-          // Fallback to mock data if API fails
-          setNews(getMockNews());
+          console.warn('No articles found in response, using fallback');
+          setNews(getEnhancedMockNews());
+          setUsingFallback(true);
         }
       } catch (error) {
-        console.error('Error fetching news:', error);
-        // Fallback to mock data if API fails
-        setNews(getMockNews());
+        console.error('NewsAPI Error:', error);
+        console.log('Using enhanced fallback news due to API limitations');
+        setNews(getEnhancedMockNews());
+        setUsingFallback(true);
       } finally {
         setLoading(false);
       }
     };
 
-    const getMockNews = () => [
+    const getEnhancedMockNews = (): NewsItem[] => [
       {
-        title: "Federal Reserve Signals Potential Rate Changes",
-        description: "The Federal Reserve indicated possible adjustments to interest rates following recent economic indicators.",
-        source: { name: "Financial Times" },
+        title: "S&P 500 Reaches New Heights Amid Strong Corporate Earnings",
+        description: "The S&P 500 index climbed to 4567.83, gaining 67.83 points (+1.51%) as major corporations report stronger-than-expected quarterly earnings. Technology and healthcare sectors led the gains.",
+        source: { name: "MarketWatch" },
         publishedAt: new Date().toISOString(),
         url: "#"
       },
       {
-        title: "Tech Stocks Rally on AI Developments",
-        description: "Major technology companies see significant gains as artificial intelligence innovations continue.",
-        source: { name: "MarketWatch" },
+        title: "NASDAQ Composite Shows Steady Growth at 14,042 Points",
+        description: "The NASDAQ Composite index rose 42.19 points (+0.30%) to close at 14,042.19, driven by strong performance in tech stocks and growing investor confidence in AI and cloud computing sectors.",
+        source: { name: "Financial Times" },
+        publishedAt: new Date(Date.now() - 1800000).toISOString(),
+        url: "#"
+      },
+      {
+        title: "Federal Reserve Maintains Current Interest Rate Policy",
+        description: "The Federal Reserve announced it will maintain current interest rates while closely monitoring inflation indicators and employment data for future policy decisions.",
+        source: { name: "Reuters" },
         publishedAt: new Date(Date.now() - 3600000).toISOString(),
         url: "#"
       },
       {
-        title: "Energy Sector Shows Resilience",
-        description: "Oil and gas companies demonstrate strong quarterly performance despite global uncertainties.",
-        source: { name: "Reuters" },
+        title: "Tech Giants Lead Market Rally with AI Innovation Focus",
+        description: "Major technology companies including Apple (AAPL), Microsoft (MSFT), and Google (GOOGL) show strong performance as artificial intelligence investments drive growth expectations.",
+        source: { name: "Bloomberg" },
+        publishedAt: new Date(Date.now() - 5400000).toISOString(),
+        url: "#"
+      },
+      {
+        title: "Energy Sector Volatility Amid Global Supply Chain Concerns",
+        description: "Oil and gas stocks experience mixed performance as investors weigh global supply chain disruptions against increasing energy demand in emerging markets.",
+        source: { name: "CNBC" },
         publishedAt: new Date(Date.now() - 7200000).toISOString(),
+        url: "#"
+      },
+      {
+        title: "Cryptocurrency Markets Show Renewed Institutional Interest",
+        description: "Bitcoin and major altcoins gain momentum as institutional investors increase cryptocurrency allocations, with several major banks announcing digital asset services.",
+        source: { name: "CoinDesk" },
+        publishedAt: new Date(Date.now() - 9000000).toISOString(),
         url: "#"
       }
     ];
@@ -118,7 +142,16 @@ const NewsSection: React.FC = () => {
     <Card className="market-card">
       <CardHeader>
         <CardTitle className="text-xl font-semibold">Market News & Analysis</CardTitle>
-        <p className="text-sm text-muted-foreground">Latest financial news from NewsAPI</p>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {usingFallback ? 'Curated financial news' : 'Latest news from NewsAPI'}
+          </p>
+          {usingFallback && (
+            <Badge variant="outline" className="text-xs bg-yellow-500/20 text-yellow-400 border-yellow-500/50">
+              DEMO MODE
+            </Badge>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
@@ -131,7 +164,7 @@ const NewsSection: React.FC = () => {
                   </a>
                 </h3>
                 <Badge className="ml-2 bg-blue-500/20 text-blue-400 border-blue-500/50 text-xs">
-                  LIVE
+                  {usingFallback ? 'DEMO' : 'LIVE'}
                 </Badge>
               </div>
               
@@ -151,6 +184,15 @@ const NewsSection: React.FC = () => {
             </div>
           ))}
         </div>
+        
+        {usingFallback && (
+          <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+            <p className="text-xs text-yellow-400">
+              <strong>Note:</strong> NewsAPI requires localhost for free tier. 
+              Real news will be available when deployed or with a paid NewsAPI plan.
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
