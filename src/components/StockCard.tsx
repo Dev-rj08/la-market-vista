@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Star } from 'lucide-react';
+import { Star, TrendingUp } from 'lucide-react';
+import StockDetailModal from './StockDetailModal';
 
 interface StockData {
   symbol: string;
@@ -22,6 +22,7 @@ const StockCard: React.FC<StockCardProps> = ({ symbol, currency }) => {
   const [stockData, setStockData] = useState<StockData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     // Check if stock is in favorites
@@ -107,6 +108,10 @@ const StockCard: React.FC<StockCardProps> = ({ symbol, currency }) => {
     setIsFavorite(!isFavorite);
   };
 
+  const handleCardClick = () => {
+    setShowModal(true);
+  };
+
   if (loading || !stockData) {
     return (
       <Card className="market-card animate-pulse">
@@ -125,42 +130,64 @@ const StockCard: React.FC<StockCardProps> = ({ symbol, currency }) => {
   const isPositive = stockData.change >= 0;
 
   return (
-    <Card className={`market-card transition-all duration-300 ${
-      isPositive ? 'hover:shadow-green-500/20' : 'hover:shadow-red-500/20'
-    } hover:shadow-lg`}>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold">{stockData.symbol}</CardTitle>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={toggleFavorite}
-            className={`p-1 ${isFavorite ? 'text-yellow-400' : 'text-muted-foreground hover:text-yellow-400'}`}
-          >
-            <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <div className="text-2xl font-bold">
-          {getCurrencySymbol(currency)}{formatPrice(stockData.price)}
-        </div>
-        
-        <div className={`flex items-center space-x-2 ${isPositive ? 'gain' : 'loss'}`}>
-          <span className="text-sm font-medium">
-            {isPositive ? '+' : ''}{getCurrencySymbol(currency)}{Math.abs(stockData.change).toFixed(2)}
-          </span>
-          <span className="text-sm">
-            ({isPositive ? '+' : ''}{stockData.changePercent.toFixed(2)}%)
-          </span>
-        </div>
-        
-        <div className="text-xs text-muted-foreground space-y-1">
-          <div>Vol: {stockData.volume.toLocaleString()}</div>
-          <div>Cap: {getCurrencySymbol(currency)}{stockData.marketCap}</div>
-        </div>
-      </CardContent>
-    </Card>
+    <>
+      <Card 
+        className={`market-card transition-all duration-300 cursor-pointer ${
+          isPositive ? 'hover:shadow-green-500/20' : 'hover:shadow-red-500/20'
+        } hover:shadow-lg hover:scale-105`}
+        onClick={handleCardClick}
+      >
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg font-semibold">{stockData.symbol}</CardTitle>
+            <div className="flex items-center space-x-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFavorite();
+                }}
+                className={`p-1 ${isFavorite ? 'text-yellow-400' : 'text-muted-foreground hover:text-yellow-400'}`}
+              >
+                <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+              </Button>
+              <TrendingUp className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="text-2xl font-bold">
+            {getCurrencySymbol(currency)}{formatPrice(stockData.price)}
+          </div>
+          
+          <div className={`flex items-center space-x-2 ${isPositive ? 'gain' : 'loss'}`}>
+            <span className="text-sm font-medium">
+              {isPositive ? '+' : ''}{getCurrencySymbol(currency)}{Math.abs(stockData.change).toFixed(2)}
+            </span>
+            <span className="text-sm">
+              ({isPositive ? '+' : ''}{stockData.changePercent.toFixed(2)}%)
+            </span>
+          </div>
+          
+          <div className="text-xs text-muted-foreground space-y-1">
+            <div>Vol: {stockData.volume.toLocaleString()}</div>
+            <div>Cap: {getCurrencySymbol(currency)}{stockData.marketCap}</div>
+          </div>
+          
+          <div className="text-xs text-blue-400 opacity-75 mt-2">
+            Click to view detailed chart
+          </div>
+        </CardContent>
+      </Card>
+
+      <StockDetailModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        symbol={stockData.symbol}
+        currency={currency}
+      />
+    </>
   );
 };
 
